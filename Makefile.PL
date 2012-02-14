@@ -23,19 +23,19 @@ WriteMakefile(
       (ABSTRACT_FROM  => 'lib/Data/FlexSerializer.pm', # retrieve abstract from module
        AUTHOR         => 'Steffen Mueller <smueller@cpan.org>') : ()),
     ( $mm < 6.3002 ? () : (
-	LICENSE => 'perl',
+        LICENSE => 'perl',
     )),
     ( $mm < 6.46 ? () : (
         META_MERGE => {
             requires => {
-		perl => '5.008001',
-	    },
+                perl => '5.008001',
+            },
             resources => {
                 repository  => 'https://github.com/tsee/Data-FlexSerializer',
             },
             no_index => {
-		directory => [qw/ t /],
-	    }
+                directory => [qw/ t /],
+            }
         },
         META_ADD => {
             build_requires     => {},
