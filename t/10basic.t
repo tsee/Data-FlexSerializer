@@ -77,6 +77,17 @@ $data{comp_json} = Compress::Zlib::compress(\$data{json}, Z_DEFAULT_COMPRESSION)
 $data{comp_storable} = Compress::Zlib::compress(\$data{storable}, Z_DEFAULT_COMPRESSION);
 $data{comp_garbage} = Compress::Zlib::compress(\$data{garbage}, Z_DEFAULT_COMPRESSION); # dubious
 
+# assert that serialize and deserialize die if called in scalar context and
+# passed multiple args:
+ok(
+  not(eval {my $x = $serializers{flex_flex_compress}->serialize([], {}); 1}),
+  "serialize dies if called in scalar context with multiple arguments"
+);
+ok(
+  not(eval {my $x = $serializers{flex_flex_compress}->deserialize(@data{qw(json storable)}); 1}),
+  "deserialize dies if called in scalar context with multiple arguments"
+);
+
 # input is implied to be the raw data on serialization, output listed
 my %results_serialize = (
   'default' => 'comp_json',
@@ -189,5 +200,6 @@ foreach my $s_name (sort keys %results_deserialize) {
   }
 }
 
-done_testing();
+# TODO test file read/write logic
 
+done_testing();
