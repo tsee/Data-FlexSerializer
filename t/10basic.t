@@ -31,6 +31,22 @@ for my $output_format (qw(json storable JSON STORABLE jSON stORABLE)) {
     cmp_ok($object->output_format, 'eq', lc $output_format, "Once constructed the output_format is normalized");
 }
 
+# Test insane construction arguments
+{
+    local $@;
+    my $error = '';
+    eval {
+        DF->new(
+            assume_compression => 1,
+            detect_compression => 1,
+        );
+        1;
+    } or do {
+        $error = $@;
+    };
+    ok($error, "We got an error with assume_compression and detect_compression passed to the constructor: $error");
+}
+
 # check whether assume_compression is turned off implicitly if detect_compression is set
 SCOPE: {
   my %opt = %defaults;
