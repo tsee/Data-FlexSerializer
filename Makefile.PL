@@ -2,6 +2,9 @@ use 5.008001;
 use ExtUtils::MakeMaker;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
+
+my ($mm) = $ExtUtils::MakeMaker::VERSION =~ /^([^_]+)/;
+
 WriteMakefile(
     NAME              => 'Data::FlexSerializer',
     VERSION_FROM      => 'lib/Data/FlexSerializer.pm', # finds $VERSION
@@ -19,4 +22,24 @@ WriteMakefile(
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM  => 'lib/Data/FlexSerializer.pm', # retrieve abstract from module
        AUTHOR         => 'Steffen Mueller <smueller@cpan.org>') : ()),
+    ( $mm < 6.3002 ? () : (
+	LICENSE => 'perl',
+    )),
+    ( $mm < 6.46 ? () : (
+        META_MERGE => {
+            requires => {
+		perl => '5.008001',
+	    },
+            resources => {
+                repository  => 'https://github.com/tsee/Data-FlexSerializer',
+            },
+            no_index => {
+		directory => [qw/ t /],
+	    }
+        },
+        META_ADD => {
+            build_requires     => {},
+            configure_requires => {}
+        },
+    )),
 );
