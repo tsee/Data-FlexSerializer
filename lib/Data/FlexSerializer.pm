@@ -329,3 +329,33 @@ data structures like C<deserialize()> does.
 Given a (single!) Perl data structure, and a (single!) file name,
 serializes the data structure and writes the result to the given file.
 Returns true on success, dies on failure.
+
+=head1 AUTHOR
+
+Steffen Mueller <smueller@cpan.org>
+
+Ævar Arnfjörð Bjarmason <avar@cpan.org>
+
+Burak Gürsoy <burak@cpan.org>
+
+Elizabeth Matthijsen <liz@dijkmat.nl>
+
+=head1 ACKNOWLEDGMENT
+
+This module was originally developed at and for booking.com.
+With approval from booking.com, this module was generalized
+and put on CPAN, for which the authors would like to express
+their gratitude.
+
+=head1 COPYRIGHT AND LICENSE
+
+ (C) 2011, 2012 Steffen Mueller and others. All rights reserved.
+ 
+ This code is available under the same license as Perl version
+ 5.8.1 or higher.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+=cut
