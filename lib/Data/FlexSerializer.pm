@@ -1,6 +1,10 @@
 package Data::FlexSerializer;
-use Any::Moose;
-use Any::Moose '::Util::TypeConstraints';
+use Moose;
+use Moose::Util::TypeConstraints qw(enum);
+use MooseX::Types::Moose qw(Maybe Bool Int Str);
+use MooseX::Types -declare => [ qw(
+    DataFlexSerializerOutputFormats
+) ];
 use autodie;
 
 our $VERSION = '1.00';
@@ -19,45 +23,45 @@ use Data::Dumper qw(Dumper);
 
 has assume_compression => (
     is      => 'ro',
-    isa     => 'Bool',
+    isa     => Bool,
     default => 1,
 );
 
 has detect_compression => (
     is      => 'ro',
-    isa     => 'Bool',
+    isa     => Bool,
     default => 0,
 );
 
 has compress_output => (
     is      => 'ro',
-    isa     => 'Bool',
+    isa     => Bool,
     default => 1,
 );
 
 has compression_level => (
     is      => 'ro',
-    isa     => 'Maybe[Int]',
+    isa     => Maybe[Int],
 );
 
 has detect_storable => (
     is      => 'ro',
-    isa     => 'Bool',
+    isa     => Bool,
     default => 0,
 );
 
-enum FlexSerializerOutputFormats => qw(
+enum DataFlexSerializerOutputFormats, [ qw(
     storable
     json
-);
+) ];
 
-coerce FlexSerializerOutputFormats
-    => from 'Str'
-    => via { lc $_ };
+coerce DataFlexSerializerOutputFormats,
+    from Str,
+    via { lc $_ };
 
 has output_format => (
     is      => 'rw',
-    isa     => 'FlexSerializerOutputFormats',
+    isa     => DataFlexSerializerOutputFormats,
     default => 'json',
     coerce  => 1,
 );

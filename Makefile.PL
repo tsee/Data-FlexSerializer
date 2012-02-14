@@ -8,8 +8,8 @@ WriteMakefile(
     PREREQ_PM         => {
       'Storable' => '0',
       'JSON::XS' => '0',
-      'Any::Moose' => '0',
       'Moose' => '0',
+      'MooseX::Types' => '0',
       'List::Util' => '0',
       'Compress::Zlib' => '0',
       'IO::Uncompress::AnyInflate' => '0',
