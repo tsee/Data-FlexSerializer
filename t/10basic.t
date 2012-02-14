@@ -24,6 +24,13 @@ foreach my $setting (sort keys %defaults) {
   is($default_szer->$setting, $defaults{$setting}, "defaults for $setting");
 }
 
+# Test constructor coercion cases
+for my $output_format (qw(json storable JSON STORABLE jSON stORABLE)) {
+    my $object = DF->new(output_format => $output_format);
+    isa_ok($object, 'Data::FlexSerializer', "We can construct with output_format => $output_format");
+    cmp_ok($object->output_format, 'eq', lc $output_format, "Once constructed the output_format is normalized");
+}
+
 # check whether assume_compression is turned off implicitly if detect_compression is set
 SCOPE: {
   my %opt = %defaults;
