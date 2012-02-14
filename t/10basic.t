@@ -201,5 +201,6 @@ foreach my $s_name (sort keys %results_deserialize) {
 }
 
 # TODO test file read/write logic
+# TODO test debugging facilities
 
 done_testing();
