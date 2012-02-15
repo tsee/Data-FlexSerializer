@@ -1,5 +1,10 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.02  Wed Feb 15 14:00 2012
+  - Require new-enough Test::More.
+
+  - More tests.
+
 1.01
   - We now only use Moose instead of using Any::Moose and trying to be
     compatible with both Moose and Mouse.

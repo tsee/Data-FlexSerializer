@@ -7,7 +7,7 @@ use MooseX::Types -declare => [ qw(
 ) ];
 use autodie;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 # Get the DEBUG constant from $Data::FlexSerializer::DEBUG or
 # $ENV{DATA_FLEXSERIALIZER_DEBUG}
