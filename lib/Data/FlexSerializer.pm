@@ -230,6 +230,10 @@ sub serialize_to_file {
 
 __END__
 
+=pod
+
+=encoding utf8
+
 =head1 NAME
 
 Data::FlexSerializer - (De-)serialization from/to (compressed) JSON or Storable
