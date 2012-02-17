@@ -1,5 +1,7 @@
 Revision history for Perl extension Data::FlexSerializer
 
+  - Mark POD as utf8 for consumers' benefit.
+
 1.03  Fri Feb 17 07:45 2012
   - Load File::Spec explicitly in tests.
 
