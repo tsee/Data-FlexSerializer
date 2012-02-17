@@ -6,6 +6,7 @@ use Storable qw/nfreeze thaw/;
 use Compress::Zlib qw(Z_DEFAULT_COMPRESSION);
 use JSON::XS qw/encode_json decode_json/;
 use Test::More;
+use File::Spec;
 
 BEGIN {
   unshift @INC, -d 't' ? File::Spec->catdir(qw(t lib)) : 'lib';
