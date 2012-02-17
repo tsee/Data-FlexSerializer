@@ -1,5 +1,8 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.03  Fri Feb 17 07:45 2012
+  - Load File::Spec explicitly in tests.
+
 1.02  Wed Feb 15 14:00 2012
   - Require new-enough Test::More.
 
