@@ -20,6 +20,7 @@ WriteMakefile(
       'Constant::FromGlobal' => '0',
       'Test::More' => '0.88',
       'File::Spec' => '0',
+      'autodie' => '0',
     }, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM  => 'lib/Data/FlexSerializer.pm', # retrieve abstract from module
