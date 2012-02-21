@@ -1,5 +1,8 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.04  Tue Feb 21 07:30 2012
+  - Explicit dependency on autodie.
+
   - Mark POD as utf8 for consumers' benefit.
 
 1.03  Fri Feb 17 07:45 2012
