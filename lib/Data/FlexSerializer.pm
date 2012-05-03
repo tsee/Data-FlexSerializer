@@ -205,6 +205,8 @@ sub deserialize_from_file {
   open my $fh, '<', $file;
   local $/;
   my $data = <$fh>;
+  close $fh or die "Error closing file handle: $!";
+
   my ($rv) = $self->deserialize($data);
   return $rv;
 }
@@ -220,7 +222,7 @@ sub serialize_to_file {
 
   open my $fh, '>', $file;
   print $fh $self->serialize($data);
-  close $fh;
+  close $fh or die "Error closing file handle: $!";
 
   return 1;
 }
