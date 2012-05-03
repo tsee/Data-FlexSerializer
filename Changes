@@ -1,5 +1,11 @@
 Revision history for Perl extension Data::FlexSerializer
 
+  - Add tests for file/fh (de)serialization
+
+  - Allow (de)serializing from file handles
+
+  - Check status when closing $fh on file (de)serialization
+
 1.04  Tue Feb 21 07:30 2012
   - Explicit dependency on autodie.
 
