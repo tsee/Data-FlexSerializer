@@ -227,6 +227,35 @@ sub serialize_to_file {
   return 1;
 }
 
+sub deserialize_from_fd {
+  my $self = shift;
+  my $fd = shift;
+
+  if (not defined $fd) {
+    Carp::croak("Need file descriptor argument");
+  }
+
+  local $/;
+  my $data = <$fd>;
+  my ($rv) = $self->deserialize($data);
+
+  return $rv;
+}
+
+sub serialize_to_fd {
+  my $self = shift;
+  my $data = shift;
+  my $fd = shift;
+
+  if (not defined $fd) {
+    Carp::croak("Need file descriptor argument");
+  }
+
+  print $fd $self->serialize($data);
+
+  return 1;
+}
+
 
 1;
 
