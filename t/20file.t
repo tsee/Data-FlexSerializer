@@ -37,12 +37,12 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
       open my $fh, '+>', $filename;
 
       # Test (de)serialization to/from file handle
-      $serializer->serialize_to_fd(\%data, $fh);
+      $serializer->serialize_to_fh(\%data, $fh);
 
       # reset file handle
       seek($fh, 0, 0);
 
-      %deserialized_data = %{ $serializer->deserialize_from_fd($fh) };
+      %deserialized_data = %{ $serializer->deserialize_from_fh($fh) };
 
       close $fh;
 
