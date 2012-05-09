@@ -1,5 +1,6 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.05  Wed May 09 17:00 2012
   - Add tests for file/fh (de)serialization
 
   - Allow (de)serializing from file handles
