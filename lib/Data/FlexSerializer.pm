@@ -379,6 +379,8 @@ Burak Gürsoy <burak@cpan.org>
 
 Elizabeth Matthijsen <liz@dijkmat.nl>
 
+Caio Romão Costa Nascimento <cpan@caioromao.com>
+
 =head1 ACKNOWLEDGMENT
 
 This module was originally developed at and for booking.com.
