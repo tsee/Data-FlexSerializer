@@ -1,5 +1,8 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.05  Tue Jun 12 19:00 2012
+  - detect_storable docs
+
 1.05  Wed May 09 17:00 2012
   - Add tests for file/fh (de)serialization
 
