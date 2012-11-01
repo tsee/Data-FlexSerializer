@@ -83,7 +83,7 @@ around BUILDARGS => sub {
     my $rv = $class->$orig(%args);
 
     if (DEBUG) {
-        warn "Dumping the new FlexSerializer object.\n" . Dumper($rv);
+        print STDERR "Dumping the new FlexSerializer object.\n" . Dumper($rv);
     }
 
     return $rv;
@@ -102,12 +102,12 @@ sub serialize {
   $comp_level = $self->{compression_level} if $do_compress; # hot path, bypass accessor
 
   if (DEBUG) {
-    warn(sprintf(
+    print STDERR sprintf(
       "FlexSerializer using the following options for serialization: "
-      . "compress_output=%s, compression_level=%s, output_format=%s",
+      . "compress_output=%s, compression_level=%s, output_format=%s\n",
       map {defined $self->{$_} ? $self->{$_} : '<undef>'}
       qw(compress_output compression_level output_format)
-    ));
+    );
   }
 
   my $output_sub = $OutputMethods{ $self->{output_format} }; # hot path, bypass accessor
@@ -134,12 +134,12 @@ sub deserialize {
   my $detect_storable = $self->{detect_storable}; # hot path, bypass accessor
 
   if (DEBUG) {
-    warn(sprintf(
+    print STDERR sprintf(
       "FlexSerializer using the following options for deserialization: "
-      . "assume_compression=%s, detect_compression=%s, detect_storable=%s",
+      . "assume_compression=%s, detect_compression=%s, detect_storable=%s\n",
       map {defined $self->{$_} ? $self->{$_} : '<undef>'}
       qw(assume_compression detect_compression detect_storable)
-    ));
+    );
   }
 
   my @out;
@@ -153,7 +153,7 @@ sub deserialize {
     }
     elsif ($detect_compression) {
       my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$uncompr);
-      warn "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed"
+      print STDERR "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed\n"
         if DEBUG;
       if (not $inflatedok) {
         $uncompr = $serialized;
@@ -165,23 +165,23 @@ sub deserialize {
 
     if ($detect_storable) {
       if ($uncompr =~ /^(?:\{|\[)/) {
-        warn "FlexSerializer: Detected that the input was JSON" if DEBUG;
-        warn "FlexSerializer: This was the start of the JSON input: '%s'",
+        print STDERR "FlexSerializer: Detected that the input was JSON\n" if DEBUG;
+        print STDERR "FlexSerializer: This was the start of the JSON input: '%s'\n",
               substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
         push @out, JSON::XS::decode_json($uncompr);
       }
       else {
       #elsif (defined Storable::read_magic(substr($uncompr, 0, 21))) {
-        warn "FlexSerializer: Detected that the input was Storable" if DEBUG;
-        warn "FlexSerializer: This was the Storable input: '%s'",
+        print STDERR "FlexSerializer: Detected that the input was Storable\n" if DEBUG;
+        print STDERR "FlexSerializer: This was the Storable input: '%s'\n",
               substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
         $uncompr =~ s/^pst0//; # remove Storable file magic if necessary
         push @out, Storable::thaw($uncompr);
       }
     }
     else {
-      warn "FlexSerializer: Assuming that the input is JSON" if DEBUG;
-      warn "FlexSerializer: This was the JSON input: '%s'",
+      print STDERR "FlexSerializer: Assuming that the input is JSON\n" if DEBUG;
+      print STDERR "FlexSerializer: This was the JSON input: '%s'\n",
            substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
       push @out, JSON::XS::decode_json($uncompr);
     }
