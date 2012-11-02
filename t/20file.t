@@ -14,7 +14,7 @@ use Data::FlexSerializer::EmptySubclass;
 
 foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass') {
 
-  foreach my $format ('json', 'storable') {
+  foreach my $format ('json', 'storable', 'sereal') {
 
     foreach my $compression (0, 1) {
 
@@ -23,6 +23,7 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
         assume_compression => $compression,
         compress_output => $compression,
         detect_storable => $format eq 'storable' ? 1 : 0,
+        detect_sereal => $format eq 'sereal' ? 1 : 0,
       );
 
       isa_ok($serializer, $class);

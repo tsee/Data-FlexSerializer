@@ -5,4 +5,5 @@ MANIFEST			This list of files
 t/01load.t
 t/10basic.t
 t/20file.t
+t/30sereal.t
 t/lib/Data/FlexSerializer/EmptySubclass.pm

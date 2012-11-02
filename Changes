@@ -1,5 +1,8 @@
 Revision history for Perl extension Data::FlexSerializer
 
+ - Add dependency on Sereal::{Decoder,Encoder} and option to detect
+   and emit the Sereal format.
+
 1.05  Tue Jun 12 19:00 2012
   - detect_storable docs
 
