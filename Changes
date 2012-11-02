@@ -1,5 +1,8 @@
 Revision history for Perl extension Data::FlexSerializer
 
+ - Remove redundant check of the close() exit code under the autodie
+   pragma.
+
 1.05  Tue Jun 12 19:00 2012
   - detect_storable docs
 
