@@ -5,6 +5,7 @@ use Data::FlexSerializer;
 use Storable qw/nfreeze thaw/;
 use Compress::Zlib qw(Z_DEFAULT_COMPRESSION);
 use JSON::XS qw/encode_json decode_json/;
+use Sereal::Encoder qw(encode_sereal);
 use Test::More;
 use File::Spec;
 
@@ -25,13 +26,14 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
     compression_level => undef,
     detect_storable => 0,
     output_format => 'json',
+    detect_sereal => 0,
   );
   foreach my $setting (sort keys %defaults) {
     is($default_szer->$setting, $defaults{$setting}, "defaults for $setting");
   }
 
   # Test constructor coercion cases
-  for my $output_format (qw(json storable JSON STORABLE jSON stORABLE)) {
+  for my $output_format (qw(json storable JSON STORABLE jSON stORABLE sereal Sereal sEreal)) {
       my $object = $class->new(output_format => $output_format);
       isa_ok($object, $class, "We can construct with output_format => $output_format");
       cmp_ok($object->output_format, 'eq', lc $output_format, "Once constructed the output_format is normalized");
@@ -75,10 +77,15 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
   my %opt_flex_in = (
     %opt_accept_compress,
     detect_storable => 1,
+    detect_sereal => 1,
   );
   my %opt_storable = (
     output_format => 'storable',
     detect_storable => 1,
+  );
+  my %opt_sereal = (
+    output_format => 'sereal',
+    detect_sereal => 1,
   );
 
   my %serializers = (
@@ -86,12 +93,18 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
     json_compress => $default_szer,
     json_no_compress => $class->new(%opt_no_compress),
     json_flex_compress => $class->new(%opt_accept_compress, compress_output => 1),
-    flex_compress => $class->new(detect_storable => 1, compress_output => 1),
+    # Accept everything
+    flex_compress => $class->new(detect_storable => 1, detect_sereal => 1, compress_output => 1),
     flex_no_compress => $class->new(%opt_flex_in, %opt_no_compress),
     flex_flex_compress => $class->new(%opt_flex_in),
+    # Storable
     s_compress => $class->new(%opt_storable),
     s_no_compress => $class->new(%opt_storable, %opt_no_compress),
     s_flex_compress => $class->new(%opt_storable, %opt_accept_compress, compress_output => 1),
+    # Sereal
+    sereal_compress => $class->new(%opt_sereal),
+    sereal_no_compress => $class->new(%opt_sereal, %opt_no_compress),
+    sereal_flex_compress => $class->new(%opt_sereal, %opt_accept_compress, compress_output => 1),
   );
 
   isa_ok($serializers{$_}, $class, 'Serializer for "$_"') for sort keys %serializers;
@@ -102,8 +115,10 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
   );
   $data{storable} = nfreeze($data{raw});
   $data{json} = encode_json($data{raw});
+  $data{sereal} = encode_sereal($data{raw});
   $data{comp_json} = Compress::Zlib::compress(\$data{json}, Z_DEFAULT_COMPRESSION);
   $data{comp_storable} = Compress::Zlib::compress(\$data{storable}, Z_DEFAULT_COMPRESSION);
+  $data{comp_sereal} = Compress::Zlib::compress(\$data{sereal}, Z_DEFAULT_COMPRESSION);
   $data{comp_garbage} = Compress::Zlib::compress(\$data{garbage}, Z_DEFAULT_COMPRESSION); # dubious
 
   # assert that serialize and deserialize die if called in scalar context and
@@ -126,12 +141,18 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
     'flex_compress' => 'comp_json',
     'flex_no_compress' => 'json',
     'flex_flex_compress' => 'json',
+    # Storable
     's_compress' => 'comp_storable',
     's_no_compress' => 'storable',
     's_flex_compress' => 'comp_storable',
+    # Sereal
+    'sereal_compress' => 'comp_sereal',
+    'sereal_no_compress' => 'sereal',
+    'sereal_flex_compress' => 'comp_sereal',
   );
   foreach my $s_name (sort keys %results_serialize) {
-    my $serializer = $serializers{$s_name} or die;
+    my $serializer = $serializers{$s_name} or die "We don't have '\$serializers{$s_name}'";
+    my $is_sereal = $s_name =~ /sereal/;
     my $data = $data{raw}; # always raw input for serialization
     my $tname = "serialization with $s_name";
     my $res;
@@ -147,11 +168,22 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
     is($res, $res[0], "$tname same result in array and scalar context");
 
     # test actual output
-    my $expected_output = $data{ $results_serialize{$s_name} } or die;
-    is($res, $expected_output, "$tname output as expected");
+    my $expected_output = $data{ $results_serialize{$s_name} } or die "We don't have \$results_serialize{$s_name}";
+    TODO: {
+      local $TODO = $is_sereal ? "Different serialized strings are OK if they decode to the same results" : undef;
+      is($res, $expected_output, "$tname output as expected");
+    }
 
-    # now assert that garbage throws exceptions
-    ok(not eval {$res = $serializer->serialize($data{garbage}); 1});
+    # Test that we either serialize or don't serialize plain SvPV's
+    my $eval_died = not eval {
+      $res = $serializer->serialize($data{garbage});
+      1;
+    };
+    if ($is_sereal) {
+      ok(!$eval_died, "Under Sereal we support serializing plain SvPV");
+    } else {
+      ok($eval_died, "We should die under Storable and JSON when fed a plain SvPV");
+    }
   }
 
   # maps input => expected output for each serializer.
@@ -195,6 +227,18 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
     },
     's_flex_compress' => {
       (map {$_ => 'raw'} qw(comp_json comp_storable json storable)),
+      (map {$_ => \undef} qw(garbage)),
+    },
+    'sereal_compress' => {
+      (map {$_ => 'raw'} qw(comp_json comp_sereal)),
+      (map {$_ => \undef} qw(json sereal garbage)),
+    },
+    'sereal_no_compress' => {
+      (map {$_ => 'raw'} qw(json sereal)),
+      (map {$_ => \undef} qw(comp_json comp_sereal garbage)),
+    },
+    'sereal_flex_compress' => {
+      (map {$_ => 'raw'} qw(comp_json comp_sereal json sereal)),
       (map {$_ => \undef} qw(garbage)),
     },
   );

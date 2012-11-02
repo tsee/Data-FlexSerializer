@@ -11,6 +11,8 @@ WriteMakefile(
     PREREQ_PM         => {
       'Storable' => '0',
       'JSON::XS' => '0',
+      'Sereal::Decoder' => '0.15',
+      'Sereal::Encoder' => '0.17',
       'Moose' => '0',
       'MooseX::Types' => '0',
       'List::Util' => '0',

@@ -1,5 +1,10 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.07 Fri Nov  2 14:59:07 CET 2012
+
+ - Add support for the Sereal format. This adds a dependency on
+   Sereal::{Decoder,Encoder}.
+
  - Remove redundant check of the close() exit code under the autodie
    pragma.
 
