@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More tests => 9;
 use Data::FlexSerializer;
 use Sereal::Encoder qw();
 use Sereal::Decoder qw();
@@ -31,4 +31,16 @@ use Scalar::Util qw(blessed);
   );
   ok($encoder == $flex_both->{sereal_encoder}, "We use encoder objects passed to us");
   ok($decoder == $flex_both->{sereal_decoder}, "We use decoder objects passed to us");
+}
+
+# Check that we can dynamically change the output format
+{
+  my $flex_dynamic = Data::FlexSerializer->new(
+    detect_sereal => 1,
+  );
+  $flex_dynamic->output_format('sereal');
+  my $value = [];
+  my $serialize = $flex_dynamic->serialize($value);
+  my $deserialize = $flex_dynamic->deserialize($serialize);
+  is_deeply($value, $deserialize, "We can dynamically change the output format");
 }

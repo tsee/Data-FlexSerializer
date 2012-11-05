@@ -142,6 +142,14 @@ sub serialize {
     ));
   }
 
+  if ($output_format eq 'sereal' && !$self->{sereal_encoder}) {
+    # We don't use the sereal_encoder accessor here for speed, and
+    # since output_format is rw someone may change this to 'sereal'
+    # dynamically, in which case we'll have to construct a new
+    # emitter.
+    $self->sereal_encoder;
+  }
+
   my @out;
   foreach my $data (@_) {
     my $serialized = $output_format eq 'json'
@@ -476,6 +484,12 @@ C<output_format> can be either set to the string C<json> (default),
 C<storable> or C<sereal>.  It has the obvious effect. Its value can be
 changed at runtime via the accessor to facilitate having certain
 output formats in experiments.
+
+Note that if you dynamically change this to C<sereal> at runtime the
+first call to L</serialize> after that will dynamically construct a
+L<Sereal::Encoder> object, to avoid this supply a custom
+L</sereal_encoder> object when constructing the object, and we won't
+have to construct it dynamically later.
 
 =head3 detect_storable
 
