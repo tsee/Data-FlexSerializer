@@ -1,6 +1,6 @@
 Revision history for Perl extension Data::FlexSerializer
 
-1.08
+1.08 Mon Nov  5 13:35:50 UTC 2012
 
  - Dynamically changing the output_format without a custom
    serial_encoder didn't work if the output format was set to
