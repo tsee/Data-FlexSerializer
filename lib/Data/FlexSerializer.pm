@@ -347,7 +347,7 @@ __END__
 
 =head1 NAME
 
-Data::FlexSerializer - (De-)serialization from/to (compressed) JSON or Storable
+Data::FlexSerializer - (De-)serialization from/to (compressed) JSON, Storable or Sereal
 
 =head1 SYNOPSIS
 
