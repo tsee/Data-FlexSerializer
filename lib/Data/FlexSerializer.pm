@@ -174,7 +174,7 @@ sub serialize {
 sub deserialize {
   my $self = shift;
 
-  my $do_uncompress = $self->{assume_compression}; # hot path, bypass accessor
+  my $assume_compression = $self->{assume_compression}; # hot path, bypass accessor
   my $detect_compression = $self->{detect_compression}; # hot path, bypass accessor
   my $detect_storable = $self->{detect_storable}; # hot path, bypass accessor
   my $detect_sereal = $self->{detect_sereal}; # hot path, bypass accessor
@@ -192,7 +192,7 @@ sub deserialize {
   my @out;
   foreach my $serialized (@_) {
     my $uncompr;
-    if ($do_uncompress) {
+    if ($assume_compression) {
       $uncompr = Compress::Zlib::uncompress(\$serialized);
       unless (defined $uncompr) {
         die "You've told me to assume compression but calling uncompress() on your input string returns undef";
