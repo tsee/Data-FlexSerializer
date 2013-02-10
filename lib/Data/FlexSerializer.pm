@@ -98,9 +98,9 @@ has sereal_decoder => (
 sub _build_sereal_decoder { Sereal::Decoder->new }
 
 my %serializer = (
-    json     => sub { shift; goto \&JSON::XS::encode_json },
-    storable => sub { shift; goto \&Storable::nfreeze },
-    sereal   => sub { shift->{sereal_encoder}->encode(@_) },
+    json     => 'JSON::XS::encode_json($_)',
+    storable => 'Storable::nfreeze($_)',
+    sereal   => '$self->{sereal_encoder}->encode($_)',
 );
 
 my %detector = (
@@ -194,23 +194,25 @@ sub BUILD {
         my $class = ref $self;
         no strict 'refs';
         no warnings 'redefine';
+        *{"$class\::serialize"}   = $self->make_serializer;
         *{"$class\::deserialize"} = $self->make_deserializer;
     } else {
+        $self->{serializer_coderef}   = $self->make_serializer;
         $self->{deserializer_coderef} = $self->make_deserializer;
     }
 
     return;
 }
 
+sub serialize   { goto $_[0]->{serializer_coderef} }
 sub deserialize { goto $_[0]->{deserializer_coderef} }
 
-sub serialize {
+sub make_serializer {
   my $self = shift;
-
-  my $do_compress = $self->{compress_output}; # hot path, bypass accessor
-  my $output_format = $self->{output_format}; # hot path, bypass accessor
+  my $compress_output = $self->compress_output;
+  my $output_format = $self->output_format;
   my $comp_level;
-  $comp_level = $self->{compression_level} if $do_compress; # hot path, bypass accessor
+  $comp_level = $self->compression_level if $compress_output;
 
   if (DEBUG) {
     warn(sprintf(
@@ -221,30 +223,43 @@ sub serialize {
     ));
   }
 
-  if ($output_format eq 'sereal' && !$self->{sereal_encoder}) {
-    # We don't use the sereal_encoder accessor here for speed, and
-    # since output_format is rw someone may change this to 'sereal'
-    # dynamically, in which case we'll have to construct a new
-    # emitter.
-    $self->sereal_encoder;
+  my $serializer = $serializer{$output_format}
+    or die "PANIC: unknown output format '$output_format'";
+
+  my $code;
+  if ($compress_output) {
+    my $comp_level_code = defined $comp_level ? $comp_level : 'Z_DEFAULT_COMPRESSION';
+    $code = "Compress::Zlib::compress(\\$serializer,$comp_level_code)";
+  } else {
+    $code = $serializer;
   }
+
+  $code = sprintf '
+sub {
+  # local *__ANON__= "__ANON__serialize__";
+  my $self = shift;
 
   my @out;
-  foreach my $data (@_) {
-    my $serializer = $serializer{$output_format}
-      or die "PANIC: unknown output format '$output_format'";
-    my $serialized = $self->$serializer($data);
-
-    if ($do_compress) {
-      $serialized = Compress::Zlib::compress(\$serialized,
-                                             (defined($comp_level) ? ($comp_level) : (Z_DEFAULT_COMPRESSION)));
-    }
-    push @out, $serialized;
-  }
+  push @out, %s for @_;
 
   return wantarray ? @out
-       : @out >  1 ? die( sprintf 'You have %d serialized structures, please call this method in list context', scalar @out )
+       : @out >  1 ? die( sprintf "You have %%d serialized structures, please call this method in list context", scalar @out )
        :            $out[0];
+
+  return @out;
+};', $code;
+
+    warn $code if DEBUG >= 2;
+
+    # Some serializors may need initialization
+    exists $initializer{$output_format} and $initializer{$output_format}();
+
+    my $coderef = eval $code or do{
+        my $error = $@ || 'Clobbed';
+        die "Couldn't create the deserialization coderef: $error\n The code is: $code\n";
+    };
+
+    return $coderef;
 }
 
 sub make_deserializer {
