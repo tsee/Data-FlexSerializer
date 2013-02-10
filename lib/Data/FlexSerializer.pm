@@ -251,7 +251,7 @@ sub {
 
     warn $code if DEBUG >= 2;
 
-    # Some serializors may need initialization
+    # Some serializers may need initialization
     exists $initializer{$output_format} and $initializer{$output_format}();
 
     my $coderef = eval $code or do{
@@ -340,7 +340,7 @@ sub {
 
     warn $code if DEBUG >= 2;
 
-    # Some serializors may need initialization
+    # Some serializers may need initialization
     exists $initializer{$_} and $initializer{$_}() for @detectors;
 
     my $coderef = eval $code or do{
