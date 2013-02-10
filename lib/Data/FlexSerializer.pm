@@ -104,18 +104,18 @@ my %serializer = (
 );
 
 my %detector = (
-    json     => '$uncompr =~ /^(?:\{|\[)/',
-    storable => '$uncompr =~ s/^pst0//', # this is not a real detector.
+    json     => '/^(?:\{|\[)/',
+    storable => 's/^pst0//', # this is not a real detector.
                                          # It just removes the storable
                                          # file magic if necessary.
                                          # Tho' storable needs to be last
-    sereal   => '$self->{sereal_decoder}->looks_like_sereal($uncompr)',
+    sereal   => '$self->{sereal_decoder}->looks_like_sereal($_)',
 );
 
 my %deserializer = (
-    json     => 'JSON::XS::decode_json($uncompr)',
-    storable => 'Storable::thaw($uncompr)',
-    sereal   => 'do { my $structure; $self->{sereal_decoder}->decode($uncompr, $structure); $structure }',
+    json     => 'JSON::XS::decode_json($_)',
+    storable => 'Storable::thaw($_)',
+    sereal   => 'do { my $structure; $self->{sereal_decoder}->decode($_, $structure); $structure }',
 );
 
 # no need to inialize anything for the default formats
@@ -280,29 +280,29 @@ sub make_deserializer {
   my $uncompress_code;
   if ($assume_compression) {
     $uncompress_code = '
-    my $uncompr = Compress::Zlib::uncompress(\$serialized);
-    unless (defined $uncompr) {
+    local $_ = Compress::Zlib::uncompress(\$serialized);
+    unless (defined $_) {
       die "You\'ve told me to assume compression but calling uncompress() on your input string returns undef";
     }';
   }
   elsif ($detect_compression) {
     $uncompress_code = '
-    my $uncompr;
-    my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$uncompr);
+    local $_;
+    my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$_);
     warn "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed"
       if DEBUG >= 3;
-    $uncompr = $serialized if not $inflatedok;';
+    $_ = $serialized if not $inflatedok;';
   }
   else {
     warn "FlexSerializer: Not using compression" if DEBUG;
     $uncompress_code = '
-    my $uncompr = $serialized;';
+    local $_ = $serialized;';
   }
 
   my $code_detect = q!
       warn "FlexSerializer: %2$s that the input was %1$s" if DEBUG >= 3;
       warn sprintf "FlexSerializer: This was the %1$s input: '%s'",
-        substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 3;
+        substr($_, 0, min(length($_), 100)) if DEBUG >= 3;
       push @out, !;
 
   my $code = @detectors == 1
