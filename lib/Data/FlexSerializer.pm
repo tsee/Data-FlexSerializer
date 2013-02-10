@@ -58,6 +58,12 @@ has detect_sereal => (
     default => 0,
 );
 
+has detect_json => (
+    is      => 'ro',
+    isa     => Bool,
+    default => 1,
+);
+
 enum DataFlexSerializerOutputFormats, [ qw(
     storable
     json
@@ -91,6 +97,62 @@ has sereal_decoder => (
 
 sub _build_sereal_decoder { Sereal::Decoder->new }
 
+my %serializer = (
+    json     => sub { shift; goto \&JSON::XS::encode_json },
+    storable => sub { shift; goto \&Storable::nfreeze },
+    sereal   => sub { shift->{sereal_encoder}->encode(@_) },
+);
+
+my %detector = (
+    json     => '$uncompr =~ /^(?:\{|\[)/',
+    storable => '$uncompr =~ s/^pst0//', # this is not a real detector.
+                                         # It just removes the storable
+                                         # file magic if necessary.
+                                         # Tho' storable needs to be last
+    sereal   => '$self->{sereal_decoder}->looks_like_sereal($uncompr)',
+);
+
+my %deserializer = (
+    json     => 'JSON::XS::decode_json($uncompr)',
+    storable => 'Storable::thaw($uncompr)',
+    sereal   => 'do { my $structure; $self->{sereal_decoder}->decode($uncompr, $structure); $structure }',
+);
+
+# no need to inialize anything for the default formats
+my %initializer;
+
+# Storable needs to be always the last as we
+# don't have a nice way to detect it
+my @detectors_order = qw/sereal json storable/;
+
+sub add_serializer {
+    my ($self, $name, $config) = @_;
+    if ((my $serialize = $config->{serialize})) {
+        warn "$name serializer overriden"
+          if exists $serializer{$name};
+        $serializer{$name} = $serialize;
+    }
+    if ((my $detect = $config->{detect})) {
+        warn "$name detector overriden"
+          if exists $detector{$name};
+        $detector{$name} = $detect;
+        unshift @detectors_order, $name;
+    }
+    if (my $deserialize = $config->{deserialize}) {
+        warn "$name deserializer overriden"
+          if exists $deserializer{$name};
+        $deserializer{$name} = $deserialize;
+    }
+    if (my $initialize = $config->{initialize}) {
+        die "The initializer needs to be a code ref. We got: $initialize"
+          unless ref $initialize eq 'CODE';
+        warn "$name deserializer overriden"
+          if exists $initializer{$name};
+        $initializer{$name} = $initialize;
+    }
+    return;
+}
+
 around BUILDARGS => sub {
     my ( $orig, $class, %args ) = @_;
 
@@ -122,8 +184,25 @@ sub BUILD {
     $self->sereal_decoder if $self->detect_sereal;
     $self->sereal_encoder if $self->output_format eq 'sereal';
 
+    my @detect = grep { my $meth = "detect_$_"; $self->$meth } @detectors_order;
+
+    if (!@detect) {
+        die "Can't deserialize without assuming or detecting a format. Pass a detect_{format} option. If only one is passed we don't do detection and always assume to receive that format.";
+    }
+
+    if ($Data::FlexSerializer::HightLander) {
+        my $class = ref $self;
+        no strict 'refs';
+        no warnings 'redefine';
+        *{"$class\::deserialize"} = $self->make_deserializer;
+    } else {
+        $self->{deserializer_coderef} = $self->make_deserializer;
+    }
+
     return;
 }
+
+sub deserialize { goto $_[0]->{deserializer_coderef} }
 
 sub serialize {
   my $self = shift;
@@ -152,13 +231,10 @@ sub serialize {
 
   my @out;
   foreach my $data (@_) {
-    my $serialized = $output_format eq 'json'
-                   ? JSON::XS::encode_json($data)
-                   : $output_format eq 'storable'
-                     ? Storable::nfreeze($data)
-                     : $output_format eq 'sereal'
-                       ? $self->{sereal_encoder}->encode($data)
-                       : die "PANIC: unknown output format '$output_format'";
+    my $serializer = $serializer{$output_format}
+      or die "PANIC: unknown output format '$output_format'";
+    my $serialized = $self->$serializer($data);
+
     if ($do_compress) {
       $serialized = Compress::Zlib::compress(\$serialized,
                                              (defined($comp_level) ? ($comp_level) : (Z_DEFAULT_COMPRESSION)));
@@ -171,109 +247,93 @@ sub serialize {
        :            $out[0];
 }
 
-sub deserialize {
+sub make_deserializer {
   my $self = shift;
 
-  my $assume_compression = $self->{assume_compression}; # hot path, bypass accessor
-  my $detect_compression = $self->{detect_compression}; # hot path, bypass accessor
-  my $detect_storable = $self->{detect_storable}; # hot path, bypass accessor
-  my $detect_sereal = $self->{detect_sereal}; # hot path, bypass accessor
-  my $sereal_decoder = $detect_sereal ? $self->{sereal_decoder} : undef;
+  my $assume_compression = $self->assume_compression;
+  my $detect_compression = $self->detect_compression;
+
+  my @detectors = grep { my $meth = "detect_$_"; $self->$meth } @detectors_order;
 
   if (DEBUG) {
-    warn(sprintf(
-      "FlexSerializer using the following options for deserialization: "
-      . "assume_compression=%s, detect_compression=%s, detect_storable=%s, detect_sereal=%s\n",
-      map {defined $self->{$_} ? $self->{$_} : '<undef>'}
-      qw(assume_compression detect_compression detect_storable detect_sereal)
-    ));
+    warn "Detectors: @detectors";
+    warn("FlexSerializer using the following options for deserialization: ",
+      join ', ', map {defined $self->$_ ? "$_=@{[$self->$_]}" : "$_=<undef>"}
+      qw(assume_compression detect_compression), map { "detect_$_" } @detectors);
   }
 
-  my @out;
-  foreach my $serialized (@_) {
+  my $uncompress_code;
+  if ($assume_compression) {
+    $uncompress_code = '
+    my $uncompr = Compress::Zlib::uncompress(\$serialized);
+    unless (defined $uncompr) {
+      die "You\'ve told me to assume compression but calling uncompress() on your input string returns undef";
+    }';
+  }
+  elsif ($detect_compression) {
+    $uncompress_code = '
     my $uncompr;
-    if ($assume_compression) {
-      $uncompr = Compress::Zlib::uncompress(\$serialized);
-      unless (defined $uncompr) {
-        die "You've told me to assume compression but calling uncompress() on your input string returns undef";
-      }
-    }
-    elsif ($detect_compression) {
-      my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$uncompr);
-      warn "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed"
-        if DEBUG;
-      if (not $inflatedok) {
-        $uncompr = $serialized;
-      }
-    }
-    else {
-      $uncompr = $serialized;
-    }
+    my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$uncompr);
+    warn "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed"
+      if DEBUG >= 3;
+    $uncompr = $serialized if not $inflatedok;';
+  }
+  else {
+    warn "FlexSerializer: Not using compression" if DEBUG;
+    $uncompress_code = '
+    my $uncompr = $serialized;';
+  }
 
-    # Copy-paste galore ahead for performance reasons. We can either
-    # make it pruttah or fast.
-    if ($detect_sereal) {
-      if ($sereal_decoder->looks_like_sereal($uncompr)) {
-        warn "FlexSerializer: Detected that the input was Sereal" if DEBUG;
-        warn "FlexSerializer: This was the Sereal input: '%s'",
-              substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-        my $structure;
-        $sereal_decoder->decode($uncompr, $structure);
-        push @out, $structure;
-      }
-      elsif ($detect_storable) {
-        if ($uncompr =~ /^(?:\{|\[)/) {
-          warn "FlexSerializer: Detected that the input was JSON" if DEBUG;
-          warn "FlexSerializer: This was the start of the JSON input: '%s'",
-                substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-          push @out, JSON::XS::decode_json($uncompr);
-        }
-        else {
-        #elsif (defined Storable::read_magic(substr($uncompr, 0, 21))) {
-          warn "FlexSerializer: Detected that the input was Storable" if DEBUG;
-          warn "FlexSerializer: This was the Storable input: '%s'",
-                substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-          $uncompr =~ s/^pst0//; # remove Storable file magic if necessary
-          push @out, Storable::thaw($uncompr);
-        }
-      }
-      else {
-        warn "FlexSerializer: Assuming that the input is JSON" if DEBUG;
-        warn "FlexSerializer: This was the JSON input: '%s'",
-             substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-        push @out, JSON::XS::decode_json($uncompr);
-      }
-    } else {
-      if ($detect_storable) {
-        if ($uncompr =~ /^(?:\{|\[)/) {
-          warn "FlexSerializer: Detected that the input was JSON" if DEBUG;
-          warn "FlexSerializer: This was the start of the JSON input: '%s'",
-                substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-          push @out, JSON::XS::decode_json($uncompr);
-        }
-        else {
-        #elsif (defined Storable::read_magic(substr($uncompr, 0, 21))) {
-          warn "FlexSerializer: Detected that the input was Storable" if DEBUG;
-          warn "FlexSerializer: This was the Storable input: '%s'",
-                substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-          $uncompr =~ s/^pst0//; # remove Storable file magic if necessary
-          push @out, Storable::thaw($uncompr);
-        }
-      }
-      else {
-        warn "FlexSerializer: Assuming that the input is JSON" if DEBUG;
-        warn "FlexSerializer: This was the JSON input: '%s'",
-             substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 2;
-        push @out, JSON::XS::decode_json($uncompr);
-      }
-    }
+  my $code_detect = q!
+      warn "FlexSerializer: %2$s that the input was %1$s" if DEBUG >= 3;
+      warn sprintf "FlexSerializer: This was the %1$s input: '%s'",
+        substr($uncompr, 0, min(length($uncompr), 100)) if DEBUG >= 3;
+      push @out, !;
+
+  my $code = @detectors == 1
+    ? sprintf $code_detect . $deserializer{$detectors[0]} . ";\n", $detectors[0], 'Assuming'
+    : join '', map {
+        my $body = $code_detect . $deserializer{$detectors[$_]} . ";\n";
+        sprintf(
+          ($_ == 0           ? "if ( $detector{$detectors[$_]} ) {\n$body\n    }"
+          :$_ == $#detectors ? " else { $detector{$detectors[$_]};\n$body\n    }"
+          :                    " elsif ( $detector{$detectors[$_]} ) {\n$body\n    }"),
+          $detectors[$_],
+          ($_ == $#detectors ? 'Assuming' : 'Detected'),
+        );
+      } 0..$#detectors
+    ;
+
+  $code = sprintf '
+sub {
+  # local *__ANON__= "__ANON__deserialize__";
+  my $self = shift;
+
+  my @out;
+  for my $serialized (@_) {
+    %s
+
+    %s
   }
 
   return wantarray ? @out
-       : @out >  1 ? die( sprintf 'You have %d deserialized structures, please call this method in list context', scalar @out )
+       : @out >  1 ? die( sprintf "You have %%d deserialized structures, please call this method in list context", scalar @out )
        :            $out[0];
 
   return @out;
+};', $uncompress_code, $code;
+
+    warn $code if DEBUG >= 2;
+
+    # Some serializors may need initialization
+    exists $initializer{$_} and $initializer{$_}() for @detectors;
+
+    my $coderef = eval $code or do{
+        my $error = $@ || 'Clobbed';
+        die "Couldn't create the deserialization coderef: $error\n The code is: $code\n";
+    };
+
+    return $coderef;
 }
 
 sub deserialize_from_file {
@@ -491,6 +551,11 @@ L<Sereal::Encoder> object, to avoid this supply a custom
 L</sereal_encoder> object when constructing the object, and we won't
 have to construct it dynamically later.
 
+=head3 detect_json
+
+C<detect_json>, if set, forces C<Data::FlexSerializer> into
+JSON-compatibility mode. Defaults to on. 
+
 =head3 detect_storable
 
 C<detect_storable>, if set, forces C<Data::FlexSerializer> into
@@ -556,6 +621,8 @@ Burak Gürsoy <burak@cpan.org>
 Elizabeth Matthijsen <liz@dijkmat.nl>
 
 Caio Romão Costa Nascimento <cpan@caioromao.com>
+
+Jonas Galhordas Duarte Alves <jgda@cpan.org>
 
 =head1 ACKNOWLEDGMENT
 
