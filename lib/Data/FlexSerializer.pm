@@ -98,24 +98,24 @@ has sereal_decoder => (
 sub _build_sereal_decoder { Sereal::Decoder->new }
 
 my %serializer = (
-    json     => 'JSON::XS::encode_json($_)',
-    storable => 'Storable::nfreeze($_)',
-    sereal   => '$self->{sereal_encoder}->encode($_)',
+    json     => sub { shift; goto \&JSON::XS::encode_json },
+    storable => sub { shift; goto \&Storable::nfreeze },
+    sereal   => sub { shift->{sereal_encoder}->encode(@_) },
 );
 
 my %detector = (
-    json     => '/^(?:\{|\[)/',
-    storable => 's/^pst0//', # this is not a real detector.
-                             # It just removes the storable
-                             # file magic if necessary.
-                             # Tho' storable needs to be last
-    sereal   => '$self->{sereal_decoder}->looks_like_sereal($_)',
+    json     => sub { $_[1] =~ /^(?:\{|\[)/ },
+    storable => sub { $_[1] =~ s/^pst0// }, # this is not a real detector.
+                                            # It just removes the storable
+                                            # file magic if necessary.
+                                            # Tho' storable needs to be last
+    sereal   => sub { shift->{sereal_decoder}->looks_like_sereal(@_) },
 );
 
 my %deserializer = (
-    json     => 'JSON::XS::decode_json($_)',
-    storable => 'Storable::thaw($_)',
-    sereal   => 'do { my $structure; $self->{sereal_decoder}->decode($_, $structure); $structure }',
+    json     => sub { shift; goto \&JSON::XS::decode_json },
+    storable => sub { shift; goto \&Storable::thaw },
+    sereal   => sub { my $structure; shift->{sereal_decoder}->decode($_[0], $structure); $structure },
 );
 
 # Storable needs to be always the last as we
@@ -211,15 +211,18 @@ sub make_serializer {
         ));
     }
 
-    my $serializer = $serializer{$output_format}
-        or die "PANIC: unknown output format '$output_format'";
+    {
+        no strict 'refs';
+        my $class = ref $self;
+        *{"$class\::_serialize_$output_format"} = $serializer{$output_format}
+          or die "PANIC: unknown output format '$output_format'";
+    }
 
-    my $code;
+    my $code = "_serialize_$output_format(\$self, \$_)";
+
     if ($compress_output) {
         my $comp_level_code = defined $comp_level ? $comp_level : 'Z_DEFAULT_COMPRESSION';
-        $code = "Compress::Zlib::compress(\\$serializer,$comp_level_code)";
-    } else {
-        $code = $serializer;
+        $code = "Compress::Zlib::compress(\\$code,$comp_level_code)";
     }
 
     $code = sprintf q{
@@ -290,18 +293,20 @@ sub make_deserializer {
         warn "FlexSerializer: %2$s that the input was %1$s" if DEBUG >= 3;
         warn sprintf "FlexSerializer: This was the %1$s input: '%s'",
             substr($_, 0, min(length($_), 100)) if DEBUG >= 3;
-        push @out, !;
+        push @out, _deserialize_%1$s($self, $_)!;
+
+    my $detector = '_detect_%1$s($self, $_)';
+    my $body     = "\n$code_detect\n    }";
 
     my $code = @detectors == 1
         # Just one detector => skip the if()else gobbledigook
-        ? sprintf $code_detect . $deserializer{$detectors[0]} . ";\n", $detectors[0], 'Assuming'
+        ? sprintf $code_detect, $detectors[0], 'Assuming'
         # Multiple detectors
         : join('', map {
-              my $body = $code_detect . $deserializer{$detectors[$_]} . ";\n";
               sprintf(
-                  ($_ == 0           ? "if ( $detector{$detectors[$_]} ) {\n$body\n    }"
-                  :$_ == $#detectors ? " else { $detector{$detectors[$_]};\n$body\n    }"
-                  :                    " elsif ( $detector{$detectors[$_]} ) {\n$body\n    }"),
+                  ($_ == 0           ? "if ( $detector ) { $body"
+                  :$_ == $#detectors ? " else { $detector; $body"
+                  :                    " elsif ( $detector ) { $body"),
                   $detectors[$_],
                   ($_ == $#detectors ? 'Assuming' : 'Detected'),
               );
@@ -330,6 +335,15 @@ sub make_deserializer {
     );
 
     warn $code if DEBUG >= 2;
+
+    # inject the deserializers and detectors in the symbol table
+    # before we eval the code.
+    for (@detectors) {
+        my $class = ref $self;
+        no strict 'refs';
+        *{"$class\::_deserialize_$_"} = $deserializer{$_};
+        *{"$class\::_detect_$_"} = $detector{$_};
+    }
 
     my $coderef = eval $code or do{
         my $error = $@ || 'Clobbed';
