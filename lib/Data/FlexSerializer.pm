@@ -118,37 +118,33 @@ my %deserializer = (
     sereal   => 'do { my $structure; $self->{sereal_decoder}->decode($_, $structure); $structure }',
 );
 
-# no need to inialize anything for the default formats
-my %initializer;
-
 # Storable needs to be always the last as we
 # don't have a nice way to detect it
 my @detectors_order = qw/sereal json storable/;
 
 sub add_serializer {
-    my ($self, $name, $config) = @_;
+    my ($class, $name, $config) = @_;
     if ((my $serialize = $config->{serialize})) {
+        die "The serializer needs to be a code ref. We got: $serialize"
+          unless ref $serialize eq 'CODE';
         warn "$name serializer overriden"
           if exists $serializer{$name};
         $serializer{$name} = $serialize;
     }
     if ((my $detect = $config->{detect})) {
+        die "The detector needs to be a code ref. We got: $detect"
+          unless ref $detect eq 'CODE';
         warn "$name detector overriden"
           if exists $detector{$name};
         $detector{$name} = $detect;
         unshift @detectors_order, $name;
     }
     if (my $deserialize = $config->{deserialize}) {
+        die "The deserializer needs to be a code ref. We got: $deserialize"
+          unless ref $deserialize eq 'CODE';
         warn "$name deserializer overriden"
           if exists $deserializer{$name};
         $deserializer{$name} = $deserialize;
-    }
-    if (my $initialize = $config->{initialize}) {
-        die "The initializer needs to be a code ref. We got: $initialize"
-          unless ref $initialize eq 'CODE';
-        warn "$name deserializer overriden"
-          if exists $initializer{$name};
-        $initializer{$name} = $initialize;
     }
     return;
 }
@@ -244,9 +240,6 @@ sub make_serializer {
 
     warn $code if DEBUG >= 2;
 
-    # Some serializers may need initialization
-    exists $initializer{$output_format} and $initializer{$output_format}();
-
     my $coderef = eval $code or do{
         my $error = $@ || 'Zombie error';
         die "Couldn't create the deserialization coderef: $error\n The code is: $code\n";
@@ -337,9 +330,6 @@ sub make_deserializer {
     );
 
     warn $code if DEBUG >= 2;
-
-    # Some serializers may need initialization
-    exists $initializer{$_} and $initializer{$_}() for @detectors;
 
     my $coderef = eval $code or do{
         my $error = $@ || 'Clobbed';
