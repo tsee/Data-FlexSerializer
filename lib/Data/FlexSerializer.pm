@@ -190,16 +190,8 @@ sub BUILD {
         die "Can't deserialize without assuming or detecting a format. Pass a detect_{format} option. If only one is passed we don't do detection and always assume to receive that format.";
     }
 
-    if ($Data::FlexSerializer::HightLander) {
-        my $class = ref $self;
-        no strict 'refs';
-        no warnings 'redefine';
-        *{"$class\::serialize"}   = $self->make_serializer;
-        *{"$class\::deserialize"} = $self->make_deserializer;
-    } else {
-        $self->{serializer_coderef}   = $self->make_serializer;
-        $self->{deserializer_coderef} = $self->make_deserializer;
-    }
+    $self->{serializer_coderef}   = $self->make_serializer;
+    $self->{deserializer_coderef} = $self->make_deserializer;
 
     return;
 }
