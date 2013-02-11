@@ -639,8 +639,8 @@ Jonas Galhordas Duarte Alves <jgda@cpan.org>
 
 =head1 ACKNOWLEDGMENT
 
-This module was originally developed at and for booking.com.
-With approval from booking.com, this module was generalized
+This module was originally developed at and for Booking.com.
+With approval from Booking.com, this module was generalized
 and put on CPAN, for which the authors would like to express
 their gratitude.
 
