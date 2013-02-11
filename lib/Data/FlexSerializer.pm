@@ -106,9 +106,9 @@ my %serializer = (
 my %detector = (
     json     => '/^(?:\{|\[)/',
     storable => 's/^pst0//', # this is not a real detector.
-                                         # It just removes the storable
-                                         # file magic if necessary.
-                                         # Tho' storable needs to be last
+                             # It just removes the storable
+                             # file magic if necessary.
+                             # Tho' storable needs to be last
     sereal   => '$self->{sereal_decoder}->looks_like_sereal($_)',
 );
 
@@ -200,46 +200,47 @@ sub serialize   { goto $_[0]->{serializer_coderef} }
 sub deserialize { goto $_[0]->{deserializer_coderef} }
 
 sub make_serializer {
-  my $self = shift;
-  my $compress_output = $self->compress_output;
-  my $output_format = $self->output_format;
-  my $comp_level;
-  $comp_level = $self->compression_level if $compress_output;
+    my $self = shift;
+    my $compress_output = $self->compress_output;
+    my $output_format = $self->output_format;
+    my $comp_level;
+    $comp_level = $self->compression_level if $compress_output;
 
-  if (DEBUG) {
-    warn(sprintf(
-      "FlexSerializer using the following options for serialization: "
-      . "compress_output=%s, compression_level=%s, output_format=%s",
-      map {defined $self->{$_} ? $self->{$_} : '<undef>'}
-      qw(compress_output compression_level output_format)
-    ));
-  }
+    if (DEBUG) {
+        warn(sprintf(
+            "FlexSerializer using the following options for serialization: "
+            . "compress_output=%s, compression_level=%s, output_format=%s",
+            map {defined $self->{$_} ? $self->{$_} : '<undef>'}
+            qw(compress_output compression_level output_format)
+        ));
+    }
 
-  my $serializer = $serializer{$output_format}
-    or die "PANIC: unknown output format '$output_format'";
+    my $serializer = $serializer{$output_format}
+        or die "PANIC: unknown output format '$output_format'";
 
-  my $code;
-  if ($compress_output) {
-    my $comp_level_code = defined $comp_level ? $comp_level : 'Z_DEFAULT_COMPRESSION';
-    $code = "Compress::Zlib::compress(\\$serializer,$comp_level_code)";
-  } else {
-    $code = $serializer;
-  }
+    my $code;
+    if ($compress_output) {
+        my $comp_level_code = defined $comp_level ? $comp_level : 'Z_DEFAULT_COMPRESSION';
+        $code = "Compress::Zlib::compress(\\$serializer,$comp_level_code)";
+    } else {
+        $code = $serializer;
+    }
 
-  $code = sprintf '
-sub {
-  # local *__ANON__= "__ANON__serialize__";
-  my $self = shift;
+    $code = sprintf q{
+        sub {
+          # local *__ANON__= "__ANON__serialize__";
+          my $self = shift;
 
-  my @out;
-  push @out, %s for @_;
+          my @out;
+          push @out, %s for @_;
 
-  return wantarray ? @out
-       : @out >  1 ? die( sprintf "You have %%d serialized structures, please call this method in list context", scalar @out )
-       :            $out[0];
+          return wantarray ? @out
+               : @out >  1 ? die( sprintf "You have %%d serialized structures, please call this method in list context", scalar @out )
+               :            $out[0];
 
-  return @out;
-};', $code;
+          return @out;
+        };
+    }, $code;
 
     warn $code if DEBUG >= 2;
 
@@ -247,7 +248,7 @@ sub {
     exists $initializer{$output_format} and $initializer{$output_format}();
 
     my $coderef = eval $code or do{
-        my $error = $@ || 'Clobbed';
+        my $error = $@ || 'Zombie error';
         die "Couldn't create the deserialization coderef: $error\n The code is: $code\n";
     };
 
@@ -255,80 +256,85 @@ sub {
 }
 
 sub make_deserializer {
-  my $self = shift;
+    my $self = shift;
 
-  my $assume_compression = $self->assume_compression;
-  my $detect_compression = $self->detect_compression;
+    my $assume_compression = $self->assume_compression;
+    my $detect_compression = $self->detect_compression;
 
-  my @detectors = grep { my $meth = "detect_$_"; $self->$meth } @detectors_order;
+    my @detectors = grep { my $meth = "detect_$_"; $self->$meth } @detectors_order;
 
-  if (DEBUG) {
-    warn "Detectors: @detectors";
-    warn("FlexSerializer using the following options for deserialization: ",
-      join ', ', map {defined $self->$_ ? "$_=@{[$self->$_]}" : "$_=<undef>"}
-      qw(assume_compression detect_compression), map { "detect_$_" } @detectors);
-  }
-
-  my $uncompress_code;
-  if ($assume_compression) {
-    $uncompress_code = '
-    local $_ = Compress::Zlib::uncompress(\$serialized);
-    unless (defined $_) {
-      die "You\'ve told me to assume compression but calling uncompress() on your input string returns undef";
-    }';
-  }
-  elsif ($detect_compression) {
-    $uncompress_code = '
-    local $_;
-    my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$_);
-    warn "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed"
-      if DEBUG >= 3;
-    $_ = $serialized if not $inflatedok;';
-  }
-  else {
-    warn "FlexSerializer: Not using compression" if DEBUG;
-    $uncompress_code = '
-    local $_ = $serialized;';
-  }
-
-  my $code_detect = q!
-      warn "FlexSerializer: %2$s that the input was %1$s" if DEBUG >= 3;
-      warn sprintf "FlexSerializer: This was the %1$s input: '%s'",
-        substr($_, 0, min(length($_), 100)) if DEBUG >= 3;
-      push @out, !;
-
-  my $code = @detectors == 1
-    ? sprintf $code_detect . $deserializer{$detectors[0]} . ";\n", $detectors[0], 'Assuming'
-    : join '', map {
-        my $body = $code_detect . $deserializer{$detectors[$_]} . ";\n";
-        sprintf(
-          ($_ == 0           ? "if ( $detector{$detectors[$_]} ) {\n$body\n    }"
-          :$_ == $#detectors ? " else { $detector{$detectors[$_]};\n$body\n    }"
-          :                    " elsif ( $detector{$detectors[$_]} ) {\n$body\n    }"),
-          $detectors[$_],
-          ($_ == $#detectors ? 'Assuming' : 'Detected'),
+    if (DEBUG) {
+        warn "Detectors: @detectors";
+        warn("FlexSerializer using the following options for deserialization: ",
+            join ', ', map {defined $self->$_ ? "$_=@{[$self->$_]}" : "$_=<undef>"}
+            qw(assume_compression detect_compression), map { "detect_$_" } @detectors
         );
-      } 0..$#detectors
-    ;
+    }
 
-  $code = sprintf '
-sub {
-  # local *__ANON__= "__ANON__deserialize__";
-  my $self = shift;
+    my $uncompress_code;
+    if ($assume_compression) {
+        $uncompress_code = '
+        local $_ = Compress::Zlib::uncompress(\$serialized);
+        unless (defined $_) {
+            die "You\'ve told me to assume compression but calling uncompress() on your input string returns undef";
+        }';
+    }
+    elsif ($detect_compression) {
+        $uncompress_code = '
+        local $_;
+        my $inflatedok = IO::Uncompress::AnyInflate::anyinflate(\$serialized => \$_);
+        warn "FlexSerializer: Detected that the input was " . ($inflatedok ? "" : "not ") . "compressed"
+            if DEBUG >= 3;
+        $_ = $serialized if not $inflatedok;';
+    }
+    else {
+        warn "FlexSerializer: Not using compression" if DEBUG;
+        $uncompress_code = '
+        local $_ = $serialized;';
+    }
 
-  my @out;
-  for my $serialized (@_) {
-    %s
+    my $code_detect = q!
+        warn "FlexSerializer: %2$s that the input was %1$s" if DEBUG >= 3;
+        warn sprintf "FlexSerializer: This was the %1$s input: '%s'",
+            substr($_, 0, min(length($_), 100)) if DEBUG >= 3;
+        push @out, !;
 
-    %s
-  }
+    my $code = @detectors == 1
+        # Just one detector => skip the if()else gobbledigook
+        ? sprintf $code_detect . $deserializer{$detectors[0]} . ";\n", $detectors[0], 'Assuming'
+        # Multiple detectors
+        : join('', map {
+              my $body = $code_detect . $deserializer{$detectors[$_]} . ";\n";
+              sprintf(
+                  ($_ == 0           ? "if ( $detector{$detectors[$_]} ) {\n$body\n    }"
+                  :$_ == $#detectors ? " else { $detector{$detectors[$_]};\n$body\n    }"
+                  :                    " elsif ( $detector{$detectors[$_]} ) {\n$body\n    }"),
+                  $detectors[$_],
+                  ($_ == $#detectors ? 'Assuming' : 'Detected'),
+              );
+          } 0..$#detectors
+        );
 
-  return wantarray ? @out
-       : @out >  1 ? die( sprintf "You have %%d deserialized structures, please call this method in list context", scalar @out )
-       :            $out[0];
+    $code = sprintf(q{
+        sub {
+          # local *__ANON__= "__ANON__deserialize__";
+          my $self = shift;
 
-  return @out;
-};', $uncompress_code, $code;
+          my @out;
+          for my $serialized (@_) {
+            %s
+
+            %s
+          }
+
+          return wantarray ? @out
+               : @out >  1 ? die( sprintf "You have %%d deserialized structures, please call this method in list context", scalar @out )
+               :            $out[0];
+
+          return @out;
+        };},
+        $uncompress_code, $code
+    );
 
     warn $code if DEBUG >= 2;
 
@@ -344,63 +350,63 @@ sub {
 }
 
 sub deserialize_from_file {
-  my $self = shift;
-  my $file = shift;
+    my $self = shift;
+    my $file = shift;
 
-  if (not defined $file or not -r $file) {
-    Carp::croak("Need filename argument or can't read file");
-  }
+    if (not defined $file or not -r $file) {
+        Carp::croak("Need filename argument or can't read file");
+    }
 
-  open my $fh, '<', $file;
-  local $/;
-  my $data = <$fh>;
-  my ($rv) = $self->deserialize($data);
-  return $rv;
+    open my $fh, '<', $file;
+    local $/;
+    my $data = <$fh>;
+    my ($rv) = $self->deserialize($data);
+    return $rv;
 }
 
 sub serialize_to_file {
-  my $self = shift;
-  my $data = shift;
-  my $file = shift;
+    my $self = shift;
+    my $data = shift;
+    my $file = shift;
 
-  if (not defined $file) {
-    Carp::croak("Need filename argument");
-  }
+    if (not defined $file) {
+        Carp::croak("Need filename argument");
+    }
 
-  open my $fh, '>', $file;
-  print $fh $self->serialize($data);
-  close $fh;
+    open my $fh, '>', $file;
+    print $fh $self->serialize($data);
+    close $fh;
 
-  return 1;
+    return 1;
 }
 
 sub deserialize_from_fh {
-  my $self = shift;
-  my $fd = shift;
+    my $self = shift;
+    my $fd = shift;
 
-  if (not defined $fd) {
-    Carp::croak("Need file descriptor argument");
-  }
+    if (not defined $fd) {
+        Carp::croak("Need file descriptor argument");
+    }
 
-  local $/;
-  my $data = <$fd>;
-  my ($rv) = $self->deserialize($data);
+    local $/;
+    my $data = <$fd>;
+    my ($rv) = $self->deserialize($data);
 
-  return $rv;
+    return $rv;
 }
 
 sub serialize_to_fh {
-  my $self = shift;
-  my $data = shift;
-  my $fd = shift;
+    my $self = shift;
+    my $data = shift;
+    my $fd = shift;
 
-  if (not defined $fd) {
-    Carp::croak("Need file descriptor argument");
-  }
+    if (not defined $fd) {
+        Carp::croak("Need file descriptor argument");
+    }
 
-  print $fd $self->serialize($data);
+    print $fd $self->serialize($data);
 
-  return 1;
+    return 1;
 }
 
 
@@ -640,7 +646,7 @@ their gratitude.
 
 =head1 COPYRIGHT AND LICENSE
 
- (C) 2011, 2012 Steffen Mueller and others. All rights reserved.
+ (C) 2011, 2012, 2013 Steffen Mueller and others. All rights reserved.
 
  This code is available under the same license as Perl version
  5.8.1 or higher.
