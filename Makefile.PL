@@ -15,6 +15,8 @@ WriteMakefile(
       'Sereal::Encoder' => '0.17',
       'Moose' => '0',
       'MooseX::Types' => '0',
+      'MooseX::ClassAttribute' => '0',
+      'MooseX::Types::Structured' => '0',
       'List::Util' => '0',
       'Compress::Zlib' => '0',
       'IO::Uncompress::AnyInflate' => '0',
