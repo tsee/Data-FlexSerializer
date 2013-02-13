@@ -1,6 +1,5 @@
 package Data::FlexSerializer;
 use Moose;
-use Moose::Util::TypeConstraints qw(enum);
 use MooseX::ClassAttribute;
 use MooseX::Types::Moose qw(ArrayRef HashRef Maybe Bool Int Str Object CodeRef);
 use MooseX::Types::Structured qw(Dict Tuple Map);
