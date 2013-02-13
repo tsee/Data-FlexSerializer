@@ -1,5 +1,9 @@
 Revision history for Perl extension Data::FlexSerializer
 
+1.09 Wed Feb  13 15:00:00 UTC 2013
+
+ - Adding support for custom serialization formats
+
 1.08 Mon Nov  5 13:35:50 UTC 2012
 
  - Dynamically changing the output_format without a custom

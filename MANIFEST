@@ -6,4 +6,5 @@ t/01load.t
 t/10basic.t
 t/20file.t
 t/30sereal.t
+t/40add_format.t
 t/lib/Data/FlexSerializer/EmptySubclass.pm
