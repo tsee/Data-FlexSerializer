@@ -7,7 +7,7 @@ use Data::Dumper ();
 Data::FlexSerializer->add_format(
     data_dumper => {
         serialize   => sub { shift; goto \&Data::Dumper::Dumper },
-        deserialize => sub { shift; my $VAR1; eval "$_[0]" },
+        deserialize => sub { my $VAR1; eval $_[1]; },
         detect      => sub { $_[1] =~ /\$[\w]+\s*=/ },
     }
 );
@@ -17,6 +17,9 @@ is(scalar Data::FlexSerializer->supported_formats, 4, "We have 4 formats now");
 
 my $flex_to_dd = Data::FlexSerializer->new(
   detect_data_dumper => 1,
+  detect_sereal => 1,
+  detect_json => 1,
+  detect_storable => 1,
   output_format => 'data_dumper',
 );
 
