@@ -3,7 +3,7 @@ use warnings;
 use Test::More tests => 9;
 use Data::FlexSerializer;
 use Sereal::Encoder qw();
-use Sereal::Decoder qw();
+use Sereal::Decoder qw(decode_sereal);
 use Scalar::Util qw(blessed);
 
 # Make sure we properly build Sereal objects at object construction time
@@ -37,10 +37,11 @@ use Scalar::Util qw(blessed);
 {
   my $flex_dynamic = Data::FlexSerializer->new(
     detect_sereal => 1,
+    compress_output => 0,
   );
   $flex_dynamic->output_format('sereal');
   my $value = [];
   my $serialize = $flex_dynamic->serialize($value);
-  my $deserialize = $flex_dynamic->deserialize($serialize);
+  my $deserialize = decode_sereal($serialize);
   is_deeply($value, $deserialize, "We can dynamically change the output format");
 }

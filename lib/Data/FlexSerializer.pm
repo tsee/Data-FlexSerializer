@@ -81,6 +81,15 @@ has output_format => (
     is      => 'rw',
     isa     => Str,
     default => 'json',
+    trigger => sub {
+        my ($self, $new_value) = @_;
+
+        if ($new_value eq 'sereal') {
+            $self->sereal_encoder unless $self->{sereal_encoder};
+        }
+        $self->{serializer_coderef} = $self->make_serializer;
+        return;
+    },
 );
 
 has detect_formats => (
