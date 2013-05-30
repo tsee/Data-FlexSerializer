@@ -9,7 +9,7 @@ use MooseX::Types -declare => [ qw(
 ) ];
 use autodie;
 
-our $VERSION = '1.09';
+our $VERSION = '1.10';
 
 # Get the DEBUG constant from $Data::FlexSerializer::DEBUG or
 # $ENV{DATA_FLEXSERIALIZER_DEBUG}
@@ -78,23 +78,14 @@ class_has formats => (
 );
 
 has output_format => (
-    is      => 'rw',
+    is      => 'ro',
     isa     => Str,
     default => 'json',
-    trigger => sub {
-        my ($self, $new_value) = @_;
-
-        if ($new_value eq 'sereal') {
-            $self->sereal_encoder unless $self->{sereal_encoder};
-        }
-        $self->{serializer_coderef} = $self->make_serializer;
-        return;
-    },
 );
 
 has detect_formats => (
     traits  => ['Hash'],
-    is      => 'rw',
+    is      => 'ro',
     isa     => FormatBool,
     default => sub { { json => 1, sereal => 0, storable => 0 } },
     coerce  => 1,
@@ -463,18 +454,42 @@ __END__
 
 =head1 NAME
 
-Data::FlexSerializer - (De-)serialization from/to (compressed) JSON, Storable or Sereal
+Data::FlexSerializer - Pluggable (de-)serialization to/from compressed/uncompressed JSON/Storable/Sereal/Whatever
+
+=head1 DESCRIPTION
+
+This module was written to convert away from Storable throughout the
+Booking.com codebase to other serialization formats such as Sereal and
+JSON.
+
+Since we needed to do these migrations in production we had to do them
+with zero downtime and deal with data stored on disk, in memcached or
+in a database that we could only gradually migrate to the new format
+as we read/wrote it.
+
+So we needed a module that deals with dynamically detecting what kind
+of existing serialized data you have, and can dynamically convert it
+to something else as it's written again.
+
+That's what this module does. Depending on the options you give it it
+can read/write any combination of
+B<compressed>/B<uncompressed>/B<maybe compressed>
+B<Storable>/B<JSON>/B<Sereal> data. You can also easily extend it to
+add support for your own input/output format in addition to the
+defaults.
 
 =head1 SYNOPSIS
 
-This module was originally written to convert away from persistent use
-of Storable to using JSON at Booking.com. Since then mostly due to
-various issues with JSON not accurately being able to represent Perl
-datastructures (e.g. preserve encoding flags) we've started to migrate
-to L<Sereal::Encoder|Sereal> instead.
+When we originally wrote this we meant to convert everything over from
+Storable to JSON. Since then mostly due to various issues with JSON
+not accurately being able to represent Perl datastructures
+(e.g. preserve encoding flags) we've started to migrate to
+L<Sereal::Encoder|Sereal> (a L<new serialization
+format|http://blog.booking.com/sereal-a-binary-data-serialization-format.html>
+we wrote) instead.
 
 However the API of this module is now slightly awkward because now it
-needs to deal with the possible detection and emission of these three
+needs to deal with the possible detection and emission of multiple
 formats, and it still uses the JSON format by default which is no
 longer the recommended way to use it.
 
@@ -549,105 +564,68 @@ longer the recommended way to use it.
     sereal_encoder => Sereal::Encoder->new(...),
   );
 
-=head1 DESCRIPTION
+=head2 Add your own format using Data::Dumper.
 
-This simple OO module implements a serializer/deserializer for the
-basic builtin Perl data structures (no blessed structures, no
-filehandles, no regexes, no self-referential structures). It can
-produce JSON, Storable or Sereal images. The output can be
-zlib-compressed or uncompressed depending on settings.
+See L<the documentation for add_format|add_format> below.
 
-The deserialization phase is more powerful: Depending on the serializer
-settings, it can be strict in only accepting compressed or uncompressed
-JSON, or it can auto-detect zlib compression. Additionally, since the
-purpose of this is to allow painless migration away from storing
-Storable images persistently, the deserialization code will optionally
-detect that the input data is a (compressed or uncompressed) Storable
-image and handle it gracefully. This flexibility comes at a price in
-performance, so in order to keep the impact low, the default options
-are more restrictive, see below.
+=head1 ATTRIBUTES
 
-=head1 CLASS METHODS
-
-=head3 add_format
-
-C<add_format> class method to add support for custom formats.
-
-  Data::FlexSerializer->add_format(
-      data_dumper => {
-          serialize   => sub { shift; goto \&Data::Dumper::Dumper },
-          deserialize => sub { shift; goto \&eval },
-          detect      => sub { $_[1] =~ /\$[\w]+\s*=/ },
-      }
-  );
-
-  my $flex_to_dd = Data::FlexSerializer->new(
-    detect_data_dumper => 1,
-    output_format => 'data_dumper',
-  );
+This is a L<Moose>-powered module so all of these are keys you can
+pass to L</new>. They're all read-only after the class is constructed,
+so you can look but you can't touch.
 
 =head1 METHODS
 
-=head2 new
+=head2 assume_compression
 
-Constructor. Takes named arguments.
+C<assume_compression> is a boolean flag that makes the deserialization
+assume that the data will be compressed. It won't have to guess,
+making the deserialization faster. Defaults to true.
 
-=head3 assume_compression
+You almost definitely want to turn L</compress_output> off too if you
+turn this off, unless you're doing a one-off migration or something.
 
-C<assume_compression> is a flag that makes the deserialization assume
-that the data will be compressed. It won't have to guess, making the
-deserialization faster. Defaults to true.
+=head2 detect_compression
 
-=head3 detect_compression
+C<detect_compression> is a boolean flag that also affects only the
+deserialization step.
 
-C<detect_compression> is a flag that also affects only the deserialization
-step. If set, it'll auto-detect whether the input is compressed. Mutually
-exclusive with C<assume_compression>. If C<detect_compression> is set, but
-C<assume_compression> is not explicitly specified, C<assume_compression> will
-be disabled (where it otherwise defaults to true).
+If set, it'll auto-detect whether the input is compressed. Mutually
+exclusive with C<assume_compression> (we'll die if you try to set
+both).
 
-=head3 compress_output
+If you set C<detect_compression> we'll disable this for you, since it
+doesn't make any sense to try to detect when you're going to assume.
+
+Defaults to false.
+
+=head2 compress_output
 
 C<compress_output> is a flag indicating whether compressed or uncompressed
 dumps are to be generated during the serialization. Defaults to true.
 
-=head3 compression_level
+You probably to turn L</assume_compression> off too if you turn this
+off, unless you're doing a one-off migration or something.
+
+=head2 compression_level
 
 C<compression_level> is an integer indicating the compression level (0-9).
 
-=head3 output_format
+=head2 output_format
 
 C<output_format> can be either set to the string C<json> (default),
-C<storable> or C<sereal>.  It has the obvious effect. Its value can be
-changed at runtime via the accessor to facilitate having certain
-output formats in experiments.
+C<storable>, C<sereal> or your own format that you've added via L</add_format>.
 
-Note that if you dynamically change this to C<sereal> at runtime the
-first call to L</serialize> after that will dynamically construct a
-L<Sereal::Encoder> object, to avoid this supply a custom
-L</sereal_encoder> object when constructing the object, and we won't
-have to construct it dynamically later.
+=head2 detect_FORMAT_NAME
 
-=head3 detect_json
+Whether we should detect this incoming format. By default only
+C<detect_json> is true. You can also set C<detect_storable>,
+C<detect_sereal> or C<detect_YOUR_FORMAT> for formats added via
+L</add_format>.
 
-C<detect_json>, if set, forces C<Data::FlexSerializer> into
-JSON-compatibility mode. Defaults to on. 
+=head2 sereal_encoder
 
-=head3 detect_storable
-
-C<detect_storable>, if set, forces C<Data::FlexSerializer> into
-Storable-compatibility mode. Apart from JSON input, it will also detect whether
-the provided blob is in valid Storable format. Defaults to off.
-
-=head3 detect_sereal
-
-C<detect_sereal>, if set, forces C<Data::FlexSerializer> into
-Sereal-compatibility mode. Apart from JSON input, it will also detect whether
-the provided blob is in valid Sereal format. Defaults to off.
-
-=head3 sereal_encoder
-
-=head3 sereal_decoder
+=head2 sereal_decoder
 
 You can supply C<sereal_encoder> or C<sereal_decoder> arguments with
 your own Serial decoder/encoder objects. Handy if you want to pass
@@ -655,6 +633,8 @@ custom options to the encoder or decoder.
 
 By default we create objects for you at BUILD time. So you don't need
 to supply this for optimization purposes either.
+
+=head1 METHODS
 
 =head2 serialize
 
@@ -686,6 +666,25 @@ data structures like C<deserialize()> does.
 Given a (single!) Perl data structure, and a (single!) file name,
 serializes the data structure and writes the result to the given file.
 Returns true on success, dies on failure.
+
+=head1 CLASS METHODS
+
+=head2 add_format
+
+C<add_format> class method to add support for custom formats.
+
+  Data::FlexSerializer->add_format(
+      data_dumper => {
+          serialize   => sub { shift; goto \&Data::Dumper::Dumper },
+          deserialize => sub { shift; my $VAR1; eval "$_[0]" },
+          detect      => sub { $_[1] =~ /\$[\w]+\s*=/ },
+      }
+  );
+
+  my $flex_to_dd = Data::FlexSerializer->new(
+    detect_data_dumper => 1,
+    output_format => 'data_dumper',
+  );
 
 =head1 AUTHOR
 

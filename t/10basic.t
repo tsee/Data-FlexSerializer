@@ -54,6 +54,30 @@ foreach my $class ('Data::FlexSerializer', 'Data::FlexSerializer::EmptySubclass'
       };
       ok($error, "We got an error with assume_compression and detect_compression passed to the constructor: $error");
   }
+  {
+      local $@;
+      my $error = '';
+      eval {
+          $class->new;
+          $class->output_format('sereal');
+          1;
+      } or do {
+          $error = $@;
+      };
+      ok($error, "We can't set the output format at runtime: $error");
+  }
+  for my $method (qw(detect_json detect_storable detect_sereal)) {
+      local $@;
+      my $error = '';
+      eval {
+          $class->new;
+          $class->$method(1);
+          1;
+      } or do {
+          $error = $@;
+      };
+      ok($error, "We can't call $method after construction: $error");
+  }
 
   # check whether assume_compression is turned off implicitly if detect_compression is set
   SCOPE: {
