@@ -207,14 +207,43 @@ sub BUILD {
     # For legacy reasons json should be on by default
     $self->_set_detect_json(1) unless defined $self->detect_json;
 
-    $self->{serializer_coderef}   = $self->make_serializer;
-    $self->{deserializer_coderef} = $self->make_deserializer;
+    my $serialize_name = $self->serialize_function_name;
+    my $deserialize_name = $self->deserialize_function_name;
+
+    no strict 'refs';
+    $self->{serializer_coderef}   = exists &{$serialize_name}
+                                  ? \&{$serialize_name}
+                                  : $self->make_serializer;
+
+    $self->{deserializer_coderef} = exists &{$deserialize_name}
+                                  ? \&{$deserialize_name}
+                                  : $self->make_deserializer;
 
     return;
 }
 
-sub serialize   { goto $_[0]->{serializer_coderef} }
-sub deserialize { goto $_[0]->{deserializer_coderef} }
+sub serialize   { goto $_[0]{serializer_coderef} }
+sub deserialize { goto $_[0]{deserializer_coderef} }
+
+sub serialize_function_name {
+    my $self = shift;
+    my $comp_level = $self->compression_level;
+    my $name = 'serialize_';
+    $name .= !$self->compress_output ? 'not_compressed_'
+           : $comp_level             ? "level_$comp_level\_compressed_"
+           :                           'compressed_';
+    return $name . $self->output_format;
+}
+
+sub deserialize_function_name {
+    my $self = shift;
+    my $name = 'deserialize_';
+    $name .= $self->assume_compression ? 'compressed_'
+           : $self->detect_compression ? 'possibly_compressed_'
+           :                             'not_compressed_';
+
+    return $name . join '_', $self->list_detect_formats;
+}
 
 sub make_serializer {
     my $self = shift;
